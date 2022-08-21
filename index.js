@@ -13,6 +13,8 @@ app.use(
 app.use(express.json());
 app.use(cors());
 
+app.use(express.static('build'));
+
 //DUMMY DATA
 let persons = [
   {
