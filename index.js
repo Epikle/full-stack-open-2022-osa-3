@@ -1,10 +1,13 @@
+require('dotenv').config();
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
 
+const Person = require('./models/person');
+
 const app = express();
 
-morgan.token('postdata', (req, res) => JSON.stringify(req.body));
+morgan.token('postdata', (req) => JSON.stringify(req.body));
 app.use(
   morgan(
     ':method :url :status :res[content-length] - :response-time ms :postdata'
@@ -12,93 +15,118 @@ app.use(
 );
 app.use(express.json());
 app.use(cors());
-
 app.use(express.static('build'));
 
-//DUMMY DATA
-let persons = [
-  {
-    name: 'Arto Hellas',
-    number: '040-123456',
-    id: 1,
-  },
-  {
-    name: 'Ada Lovelace',
-    number: '39-44-5323523',
-    id: 2,
-  },
-  {
-    name: 'Dan Abramov',
-    number: '12-43-234345',
-    id: 3,
-  },
-  {
-    name: 'Mary Poppendieck',
-    number: '39-23-6423122',
-    id: 4,
-  },
-];
-
-app.get('/info', (req, res) => {
-  const personsArrayLength = persons.length;
-  res.send(`
-  Phonebook has info for ${personsArrayLength} people<br />
-  ${Date()}
-  `);
+//info page
+app.get('/info', (req, res, next) => {
+  let personsArrayLength = 0;
+  Person.find({})
+    .then((person) => {
+      personsArrayLength = person.length;
+      res.send(`
+      Phonebook has info for ${personsArrayLength} people<br />
+      ${Date()}
+      `);
+    })
+    .catch((error) => next(error));
 });
 
 //API
 //CREATE new person
-app.post('/api/persons', (req, res) => {
-  const body = req.body;
-  const existingPerson = persons.find((person) => person.name === body.name);
-  const errors = [];
+app.post('/api/persons', (req, res, next) => {
+  const { name, number } = req.body;
 
-  !body.name && errors.push('name is missing');
-  !body.number && errors.push('number is missing');
-  existingPerson && errors.push('name must be unique');
+  const person = new Person({
+    name: name,
+    number: number,
+  });
 
-  if (errors.length > 0) {
-    return res.status(400).json({
-      error: errors.join(', '),
-    });
-  }
-
-  const newPerson = {
-    name: body.name,
-    number: body.number,
-    id: Math.random(),
-  };
-
-  persons = persons.concat(newPerson);
-  res.json(newPerson);
+  person
+    .save()
+    .then((savedPerson) => {
+      res.json(savedPerson);
+    })
+    .catch((error) => next(error));
 });
 
 //READ all
-app.get('/api/persons', (req, res) => {
-  res.json(persons);
+app.get('/api/persons', (req, res, next) => {
+  Person.find({})
+    .then((person) => {
+      res.json(person);
+    })
+    .catch((error) => next(error));
 });
 
 //READ by id
-app.get('/api/persons/:id', (req, res) => {
+app.get('/api/persons/:id', (req, res, next) => {
   const { id } = req.params;
-  const person = persons.find((person) => person.id === +id);
-  if (!person) {
-    return res.status(404).end();
-  }
-  res.json(person);
+
+  Person.findById(id)
+    .then((person) => {
+      if (person) {
+        res.json(person);
+      } else {
+        res.status(404).end();
+      }
+    })
+    .catch((error) => next(error));
+});
+
+//UPDATE by id
+app.put('/api/persons/:id', (req, res, next) => {
+  const { id } = req.params;
+  const { name, number } = req.body;
+
+  const person = {
+    name: name,
+    number: number,
+  };
+
+  Person.findByIdAndUpdate(id, person, {
+    new: true,
+    runValidators: true,
+    context: 'query',
+  })
+    .then((updatedPerson) => {
+      if (updatedPerson) {
+        res.json(updatedPerson);
+      } else {
+        res.status(404).end();
+      }
+    })
+    .catch((error) => next(error));
 });
 
 //DELETE by id
-app.delete('/api/persons/:id', (req, res) => {
+app.delete('/api/persons/:id', (req, res, next) => {
   const { id } = req.params;
-  persons = persons.filter((person) => person.id !== +id);
-  res.status(204).end();
+
+  Person.findByIdAndRemove(id)
+    .then(() => {
+      res.status(204).end();
+    })
+    .catch((error) => next(error));
 });
 
 //NOT FOUND
 app.use((req, res) => {
   res.status(404).json({ error: 'unknown endpoint' });
+});
+
+//ERROR HANDLING
+app.use((error, req, res, next) => {
+  console.error(error.message);
+
+  if (error.name === 'CastError') {
+    return res.status(400).json({ error: 'check id format' });
+  } else if (error.name === 'ValidationError') {
+    return res.status(400).json({ error: error.message });
+  } else if (error.name === 'MongoServerError' && error.code === 11000) {
+    return res.status(400).json({ error: 'duplicate value' });
+  }
+
+  res.status(500).json({ error: 'something went wrong' });
 });
 
 //SERVER
