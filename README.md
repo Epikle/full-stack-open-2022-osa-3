@@ -1,6 +1,5 @@
 # puhelinluettelon backend
 
-- API PERSONS: [API PERSONS](https://full-stack-open-2022-osa-3-production.up.railway.app/api/persons)
-- LIVE SITE: [LIVE SITE](https://full-stack-open-2022-osa-3-production.up.railway.app/)
+- Removed API and site from Heroku because they removed free tier.
 
-- 3.22, aika yht. 4h15min
+- 3.22, time total 4h15min
